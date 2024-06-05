@@ -3,9 +3,9 @@
   <world name="ign_moveit2_follow_target_world">
 
     <!-- Physics -->
-    <plugin filename="ignition-gazebo-physics-system" name="ignition::gazebo::systems::Physics">
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics">
       <engine>
-        <filename>ignition-physics-dartsim-plugin</filename>
+        <filename>gz-physics-dartsim-plugin</filename>
       </engine>
       <dart>
         <collision_detector>bullet</collision_detector>
@@ -17,7 +17,7 @@
     </physics>
 
     <!-- Scene -->
-    <plugin filename="ignition-gazebo-scene-broadcaster-system" name="ignition::gazebo::systems::SceneBroadcaster">
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster">
     </plugin>
     <scene>
       <ambient>0.8 0.8 0.8</ambient>
@@ -25,7 +25,7 @@
     </scene>
 
     <!-- User Commands (transform control) -->
-    <plugin filename="ignition-gazebo-user-commands-system" name="ignition::gazebo::systems::UserCommands">
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands">
     </plugin>
 
 
@@ -96,7 +96,7 @@
         </visual>
       </link>
       <!-- Pose publisher plugin, used to determine the target pose to reach -->
-      <plugin filename="ignition-gazebo-pose-publisher-system" name="ignition::gazebo::systems::PosePublisher">
+      <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
         <publish_nested_model_pose>true</publish_nested_model_pose>
         <publish_link_pose>false</publish_link_pose>
         <publish_collision_pose>false</publish_collision_pose>

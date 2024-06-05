@@ -31,9 +31,9 @@ def generate_launch_description() -> LaunchDescription:
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution(
                     [
-                        FindPackageShare("ros_ign_gazebo"),
+                        FindPackageShare("ros_gz_sim"),
                         "launch",
-                        "ign_gazebo.launch.py",
+                        "gz_sim.launch.py",
                     ]
                 )
             ),
@@ -45,7 +45,7 @@ def generate_launch_description() -> LaunchDescription:
     nodes = [
         # ros_ign_bridge (clock -> ROS 2)
         Node(
-            package="ros_ign_bridge",
+            package="ros_gz_bridge",
             executable="parameter_bridge",
             output="log",
             arguments=[
@@ -58,7 +58,7 @@ def generate_launch_description() -> LaunchDescription:
         ),
         # ros_ign_bridge (target pose -> ROS 2)
         Node(
-            package="ros_ign_bridge",
+            package="ros_gz_bridge",
             executable="parameter_bridge",
             output="log",
             arguments=[

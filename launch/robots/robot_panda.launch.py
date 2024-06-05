@@ -1,13 +1,17 @@
 #!/usr/bin/env -S ros2 launch
 """Launch script for spawning Franka Emika Panda into Ignition Gazebo world"""
 
+from os import path
 from typing import List
+
+from ament_index_python.packages import get_package_share_directory
 
 from launch_ros.actions import Node
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
+
 
 
 def generate_launch_description() -> LaunchDescription:
@@ -23,7 +27,7 @@ def generate_launch_description() -> LaunchDescription:
     nodes = [
         # ros_ign_gazebo_create
         Node(
-            package="ros_ign_gazebo",
+            package="ros_gz_sim",
             executable="create",
             output="log",
             arguments=["-file", model, "--ros-args", "--log-level", log_level],
@@ -43,8 +47,11 @@ def generate_declared_arguments() -> List[DeclareLaunchArgument]:
         # Model for Ignition Gazebo
         DeclareLaunchArgument(
             "model",
-            default_value="panda",
-            description="Name or filepath of model to load.",
+            default_value=path.join(
+                get_package_share_directory("panda_description"),
+                "panda",
+                "model.sdf",
+            ),
         ),
         # Miscellaneous
         DeclareLaunchArgument(
