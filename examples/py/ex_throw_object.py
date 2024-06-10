@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-
+import time
 from copy import deepcopy
 from threading import Thread
 
@@ -64,7 +64,7 @@ class MoveItThrowObject(Node):
             position=position_above_object,
             quat_xyzw=default_quat,
         )
-        self._moveit2.wait_until_executed()
+        self._moveit2.wait_until_executed()  #TODO: "wait_until_executed" does not wait when path is still planned!!
 
         # Move to grasp position
         self._moveit2.move_to_pose(
@@ -89,7 +89,7 @@ class MoveItThrowObject(Node):
         self._moveit2.wait_until_executed()
 
         # Move to pre-throw configuration
-        joint_configuration_pre_throw = [0.0, -1.75, 0.0, -0.1, 0.0, 3.6, 0.8]
+        joint_configuration_pre_throw = [0.0, -1.5, 0.0, -0.2, 0.0, 3.6, 0.8]
         self._moveit2.move_to_configuration(joint_configuration_pre_throw)
         self._moveit2.wait_until_executed()
 
