@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import time
 from copy import deepcopy
 from threading import Thread
 
