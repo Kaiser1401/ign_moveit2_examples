@@ -5,6 +5,7 @@
   <description>C++ and Python examples of using MoveIt 2 for planning motions that are executed inside GazeboSim simulation environment</description>
   <maintainer email="orsula.andrej@gmail.com">Andrej Orsula</maintainer>
   <author>Andrej Orsula</author>
+  <author>Klaus Ening</author>
   <license>BSD</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
