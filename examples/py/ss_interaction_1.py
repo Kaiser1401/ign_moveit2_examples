@@ -12,16 +12,51 @@ from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 from rclpy.qos import QoSProfile
 
+import subprocess
+import math
 
+import os
+def euler_from_quaternion(x, y, z, w):
+    """
+    Convert a quaternion into euler angles (roll, pitch, yaw)
+    roll is rotation around x in radians (counterclockwise)
+    pitch is rotation around y in radians (counterclockwise)
+    yaw is rotation around z in radians (counterclockwise)
+    """
+    t0 = +2.0 * (w * x + y * z)
+    t1 = +1.0 - 2.0 * (x * x + y * y)
+    roll_x = math.atan2(t0, t1)
 
+    t2 = +2.0 * (w * y - z * x)
+    t2 = +1.0 if t2 > +1.0 else t2
+    t2 = -1.0 if t2 < -1.0 else t2
+    pitch_y = math.asin(t2)
 
+    t3 = +2.0 * (w * z + x * y)
+    t4 = +1.0 - 2.0 * (y * y + z * z)
+    yaw_z = math.atan2(t3, t4)
 
-class MoveItThrowObject(Node):
+    return roll_x, pitch_y, yaw_z  # in radians
+
+joint_configuration_default = [
+    0.0,
+    -0.7853981633974483,
+    0.0,
+    -2.356194490192345,
+    0.0,
+    1.5707963267948966,
+    0.7853981633974483,
+]
+
+class SSInteraction(Node):
     def __init__(self):
         super().__init__("ss_interaction_1")
 
         # Create callback group that allows execution of callbacks in parallel without restrictions
         self._callback_group = ReentrantCallbackGroup()
+
+        self._got_pose = False
+        self._initial_object_pose:Pose = None
 
         # Create MoveIt 2 interface
         self._moveit2 = MoveIt2(
@@ -58,6 +93,17 @@ class MoveItThrowObject(Node):
 
         self.get_logger().info("Initialization successful.")
 
+    def reset_object_pose(self,world,name,pose:Pose):
+        # gz_moveit2_manipulation_1
+        # interaction_cube
+
+        cmd = "gz"
+        params = f"service -s /world/{world}/set_pose --reqtype gz.msgs.Pose --reptype gz.msgs.Boolean --timeout 300 --req 'name:\"{name}\", position: {{x: '{pose.position.x:.2f}',y: '{pose.position.y:.2f}',z: '{pose.position.z:.2f}',}}, orientation: {{w: '{pose.orientation.w:.2f}', x: '{pose.orientation.x:.2f}', y: '{pose.orientation.y:.2f}', z: '{pose.orientation.z:.2f}',}}'"
+        print(params)
+        self.get_logger().info(f"Resetting object '{name}' pose")
+        #subprocess.run([cmd, params])
+        os.system(cmd+" "+params)
+
 
     def target_pose_callback(self, msg: PoseStamped):
         """
@@ -68,44 +114,58 @@ class MoveItThrowObject(Node):
         if msg.pose == self.__previous_target_pose:
             return
 
-        self.get_logger().info("Target pose has changed.")
+        if not self._got_pose:
+            #first time
+            self._initial_object_pose = deepcopy(msg.pose)
+        self._got_pose = True
+
+#        self.get_logger().info("Target pose has changed.")
 
         # Update for next callback
         self.__previous_target_pose = msg.pose
 
 
 
-    def exec_behaviour_1(self):
+    def exec_behaviour_1(self, loop_count=1):
 
-        #randomize pose in gz ?
+        for x in range(loop_count):
 
-        #get pose from gz
-        pose_is_pre = self.__previous_target_pose
+            #randomize pose in gz ?
 
-        #emulte perception
-        pose_hat, uncertainties = self.sample_around_pose(pose_is_pre)
-        pose_dest = deepcopy(pose_hat)
+            while (not self._got_pose):
+                self.get_logger().warn("No target pose yet... ")
+                time.sleep(1)
 
-        # set target
-        pose_dest.position.x += 0.3
+            #get pose from gz
+            pose_is_pre = self.__previous_target_pose
 
-        # predict from uncertainties
+            print(pose_is_pre)
 
-        #interact
-        self.grip_and_place(pose_hat, pose_dest)
+            #emulte perception
+            pose_hat, uncertainties = self.sample_around_pose(pose_is_pre)
+            pose_dest = deepcopy(pose_hat)
 
+            # set target
+            pose_dest.position.x += 0.3
 
-        #get pose from gz
-        pose_is_post = self.__previous_target_pose
+            # predict from uncertainties
 
-        #check success
-        # TODO define success
+            #interact
+            self.grip_and_place(pose_hat, pose_dest)
 
-        # update / learn with uncertainties and success
+            #get pose from gz
+            pose_is_post = self.__previous_target_pose
 
-        # reset
+            print(pose_is_post)
 
-        # repeat
+            #check success
+            # TODO define success
+
+            # update / learn with uncertainties and success
+
+            # reset
+            self.reset_object_pose("gz_moveit2_manipulation_1","interaction_cube",self._initial_object_pose)
+
 
 
     def sample_around_pose(self,pose_is: Pose) -> [Pose, ]:
@@ -117,9 +177,71 @@ class MoveItThrowObject(Node):
         return pose_sampled, uncertainties
 
 
-    def grip_and_place(self,start,goal):
+    def grip_and_place(self,start:Pose,goal:Pose):
 
+        # Open gripper
+        self._moveit2_gripper.open()
+        self._moveit2_gripper.wait_until_executed()
 
+        # Move_to_default
+        self._moveit2.move_to_configuration(joint_configuration_default)
+        self._moveit2.wait_until_executed()
+
+        above_s = deepcopy(start)
+        above_s.position.z +=0.10
+
+        above_g = deepcopy(goal)
+        above_g.position.z +=0.10
+
+        # to object  (over, down, grip, over)
+        self._moveit2.move_to_pose(
+            position=above_s.position,
+            quat_xyzw=above_s.orientation,
+        )
+        self._moveit2.wait_until_executed()
+
+        self._moveit2.move_to_pose(
+            position=start.position,
+            quat_xyzw=start.orientation,
+        )
+        self._moveit2.wait_until_executed()
+
+        # close gripper
+        self._moveit2_gripper.close()
+        self._moveit2_gripper.wait_until_executed()
+
+        self._moveit2.move_to_pose(
+            position=above_s.position,
+            quat_xyzw=above_s.orientation,
+        )
+        self._moveit2.wait_until_executed()
+
+        # to object  (over, down, loose, over)
+        self._moveit2.move_to_pose(
+            position=above_g.position,
+            quat_xyzw=above_g.orientation,
+        )
+        self._moveit2.wait_until_executed()
+
+        self._moveit2.move_to_pose(
+            position=goal.position,
+            quat_xyzw=goal.orientation,
+        )
+        self._moveit2.wait_until_executed()
+
+        # close gripper
+        self._moveit2_gripper.open()
+        self._moveit2_gripper.wait_until_executed()
+
+        self._moveit2.move_to_pose(
+            position=above_g.position,
+            quat_xyzw=above_g.orientation,
+        )
+        self._moveit2.wait_until_executed()
+
+        # Move_to_default
+        self._moveit2.move_to_configuration(joint_configuration_default)
+        self._moveit2.wait_until_executed()
 
 
     def throw(self):
@@ -205,24 +327,27 @@ class MoveItThrowObject(Node):
 def main(args=None):
     rclpy.init(args=args)
 
-    object_thrower = MoveItThrowObject()
+    ss_interaction = SSInteraction()
 
     # Spin the node in background thread(s)
     executor = rclpy.executors.MultiThreadedExecutor(3)
-    executor.add_node(object_thrower)
+    executor.add_node(ss_interaction)
     executor_thread = Thread(target=executor.spin, daemon=True, args=())
     executor_thread.start()
 
     # Wait for everything to setup
     sleep_duration_s = 2.0
     if rclpy.ok():
-        object_thrower.create_rate(1 / sleep_duration_s).sleep()
+        ss_interaction.create_rate(1 / sleep_duration_s).sleep()
 
-    object_thrower.exec_behaviour_1()
+
+    ss_interaction.exec_behaviour_1(5)
 
     rclpy.shutdown()
     exit(0)
 
 
+
 if __name__ == "__main__":
     main()
+

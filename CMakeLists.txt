@@ -47,6 +47,7 @@ set(EXAMPLES_PY_DIR examples/py)
 install(PROGRAMS
     ${EXAMPLES_PY_DIR}/ex_follow_target.py
     ${EXAMPLES_PY_DIR}/ex_throw_object.py
+    ${EXAMPLES_PY_DIR}/ss_interaction_1.py
     DESTINATION lib/${PROJECT_NAME}
 )
 

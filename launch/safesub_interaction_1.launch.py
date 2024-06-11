@@ -39,7 +39,7 @@ def generate_launch_description() -> LaunchDescription:
                 )
             ),
             launch_arguments=[
-                ("world_type", "throw_object"),
+                ("world_type", "manipulation_1"),
                 ("robot_type", robot_type),
                 ("rviz_config", rviz_config),
                 ("use_sim_time", use_sim_time),
@@ -61,7 +61,7 @@ def generate_launch_description() -> LaunchDescription:
         ),
     ]
 
-    return LaunchDescription(declared_arguments + launch_descriptions + nodes)
+    return LaunchDescription(declared_arguments + launch_descriptions) # + nodes)
 
 
 def generate_declared_arguments() -> List[DeclareLaunchArgument]:
