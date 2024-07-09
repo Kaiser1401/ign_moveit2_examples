@@ -9,7 +9,7 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, Shutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
@@ -45,11 +45,13 @@ def generate_launch_description() -> LaunchDescription:
                 ("use_sim_time", use_sim_time),
                 ("ign_verbosity", ign_verbosity),
                 ("log_level", log_level),
+                ("enable_rviz", "False")
             ],
         ),
     ]
 
     # List of nodes to be launched
+    # TODO shutdown launch when node is done
     nodes = [
         # Run the example node (Python)
         Node(
@@ -58,10 +60,11 @@ def generate_launch_description() -> LaunchDescription:
             output="log",
             arguments=["--ros-args", "--log-level", log_level],
             parameters=[{"use_sim_time": use_sim_time}],
+            on_exit=[Shutdown()],
         ),
     ]
 
-    return LaunchDescription(declared_arguments + launch_descriptions) # + nodes)
+    return LaunchDescription(declared_arguments + launch_descriptions + nodes)
 
 
 def generate_declared_arguments() -> List[DeclareLaunchArgument]:

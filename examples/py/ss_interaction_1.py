@@ -17,6 +17,20 @@ import math
 
 import os
 
+import data_utils
+import classify
+
+from pathlib import Path
+
+data_folder = 'sim_data'
+all_done_file = 'all.done'
+
+sf_data = 'in'
+sf_done = 'in_done'
+sf_out = 'out'
+sf_working = 'working'
+
+
 joint_configuration_default = [
     0.0,
     -0.7853981633974483,
@@ -118,6 +132,211 @@ class SSInteraction(Node):
         # Update for next callback
         self.__previous_target_pose = msg.pose
 
+    def write_all_done(self, folder):
+        open(folder / all_done_file, 'a').close()
+
+    def exec_behaviour_1_fromfolder(self,folder:Path):
+
+        self.get_logger().warn(str(Path().cwd().absolute()))
+
+        #get first file
+        datafolder = folder / sf_data
+        files = list(datafolder.iterdir())
+        if len(files) == 0:
+            self.write_all_done(folder)
+            return
+
+        f = files.pop(0)
+        f_data = f
+        fname = f.name
+        pw = Path(folder / sf_working / fname)
+        pc = Path(folder / sf_working / fname ).with_suffix('.classifier')
+        pd = Path(folder / sf_done / fname)
+        po = Path(folder / sf_out / fname)
+
+        pw.parent.mkdir(exist_ok=True, parents=True)
+        pd.parent.mkdir(exist_ok=True, parents=True)
+        po.parent.mkdir(exist_ok=True, parents=True)
+
+        b_warmstart = False
+        if pw.exists():
+            f = pw
+            b_warmstart = True
+
+
+        if pc.exists():
+            clf = data_utils.load_data(pc)
+        else:
+            clf = classify.Classifyer()
+
+        succ_list_abs = []
+        succ_list_rel = []
+
+        succ_thresh_dist = 0.05
+
+        self._moveit2_gripper.close()
+        self._moveit2_gripper.wait_until_executed()
+        def jreset(try_count=3)->bool:
+            # Move_to_default
+
+            try_count-=1
+
+            self._moveit2.move_to_configuration(joint_configuration_default)
+            self._moveit2.wait_until_executed()
+
+            self._moveit2_gripper.open()
+            self._moveit2_gripper.wait_until_executed()
+
+            js = self._moveit2.joint_state
+
+            joint_pos = []
+            for n in self._moveit2.joint_names:
+                jp = js.position[js.name.index(n)]
+                joint_pos.append(jp)
+
+            dist = data_utils.joint_dist(joint_pos, joint_configuration_default)
+
+            b_worked = dist < 0.1
+
+            self._moveit2_gripper.open()
+            self._moveit2_gripper.wait_until_executed()
+
+            if not self._moveit2_gripper.is_open:
+                self.get_logger().warn("gripper not open")
+                b_worked = False
+
+
+            if b_worked:
+                self.get_logger().info("Reset to joints succeeded")
+            else:
+                if try_count > 0:
+                    time.sleep(1)
+                    self.get_logger().warn("Reset to joints failed, trying again ...")
+                    b_worked=jreset(try_count)
+                else:
+                    self.get_logger().error("Reset to joints failed")
+
+            return b_worked
+
+        jreset()
+
+        while (not self._got_pose):
+            self.get_logger().warn("No Initial pose yet... ", throttle_duration_sec=1)
+            time.sleep(0.1)
+
+        start_base = data_utils.p2t(self._initial_object_pose)
+
+        self.get_logger().info("Starting behaviour Sequence ...")
+        self.get_logger().warn(f"Loading file {str(f.absolute())}")
+
+        entries = data_utils.load_data(f)
+        l = len(entries)
+        i=0
+
+        b_completed_file = False
+        fishy_counter = 0
+        for e in entries:
+            assert isinstance(e, data_utils.DataEntry)
+            i+=1
+            if e.b_outcome is not None:
+                b_completed_file = (i == l)
+                continue
+
+            if i==1:
+                clf.resetConfusion()
+
+
+            self.get_logger().warn(f"Sequence {i}/{l} ...")
+
+            e.start_common = start_base
+
+            pose_is_pre = data_utils.t2p(e.get_pose_is())
+
+            # reset to start
+
+            if not jreset():
+                break
+
+            self.reset_object_pose("gz_moveit2_manipulation_1", "interaction_cube", pose_is_pre)
+            self._got_pose = False
+
+            #wait for gazebo to set pose
+            while (not self._got_pose):
+                self.get_logger().warn("No target pose yet... ", throttle_duration_sec=1)
+                time.sleep(0.05)
+
+            pose_hat = data_utils.t2p(e.get_pose_hat())
+
+            self.reset_object_pose("gz_moveit2_manipulation_1", "visual_cube_start", pose_hat)
+    
+            pose_dest = data_utils.t2p(e.get_goal_hat())
+
+            pred = clf.predict(e.sampled_variance)
+
+
+            # interact
+            res = self.grip_and_place(pose_hat, pose_dest, bool_lift=False)
+
+            if not res:
+                fishy_counter += 1
+                if fishy_counter > 5:
+                    self.get_logger().error("Something seems fishy... lets quit")
+                    return
+
+            # get pose from gz
+            pose_is_post = self.__previous_target_pose
+
+
+            # TODO define success
+            # check success
+            # absolute (is) goal within threshold?
+            succ_abs = data_utils.pose_distance(pose_is_post, e.get_goal_is()) <= succ_thresh_dist
+            succ_list_abs.append(succ_abs)
+
+            # relative (estimated) goal within threshold?
+            succ_rel = data_utils.pose_distance(pose_is_post, e.get_goal_hat()) <= succ_thresh_dist
+            succ_list_rel.append(succ_rel)
+
+
+
+            clf.learn(e.sampled_variance, succ_abs)
+            clf.storeOutcome(pred, succ_abs)
+
+            print(pred,succ_abs,succ_rel)
+
+            print()
+
+            e.b_simulated = True
+            e.b_prediction = pred
+            e.b_outcome = succ_abs
+
+            b_completed_file = (i==l)
+            # update / learn with uncertainties and success
+
+
+            # write data every now and then,
+            if (i % 25) == 0:
+                data_utils.write_data(entries, pw, backup=(i % 250 == 0))
+                data_utils.write_data(clf, pc)
+
+
+        print(succ_list_abs)
+        print(succ_list_rel)
+        print(clf.confusion)
+
+        data_utils.write_data(entries, pw)
+        data_utils.write_data(clf, pc)
+        if b_completed_file:
+            f_data.rename(pd)
+            pw.rename(po)
+            pc.rename(po.with_suffix('.classifier'))
+
+            if len(files) == 0:
+                self.write_all_done(folder)
+
+
+
+
 
 
     def exec_behaviour_1(self, loop_count=1):
@@ -161,6 +380,8 @@ class SSInteraction(Node):
 
             #interact
             self.grip_and_place(pose_hat, pose_dest, bool_lift=False)
+
+
 
             #get pose from gz
             pose_is_post = self.__previous_target_pose
@@ -210,7 +431,7 @@ class SSInteraction(Node):
             position=above_s.position,
             quat_xyzw=above_s.orientation,
         )
-        self._moveit2.wait_until_executed()
+        res = self._moveit2.wait_until_executed()
 
         self._moveit2.move_to_pose(
             position=start.position,
@@ -255,7 +476,9 @@ class SSInteraction(Node):
 
         # Move_to_default
         self._moveit2.move_to_configuration(joint_configuration_default)
-        self._moveit2.wait_until_executed()
+        res = self._moveit2.wait_until_executed() & res
+
+        return res
 
 
 
@@ -276,7 +499,10 @@ def main(args=None):
         ss_interaction.create_rate(1 / sleep_duration_s).sleep()
 
 
-    ss_interaction.exec_behaviour_1(5)
+    #ss_interaction.exec_behaviour_1(5)
+
+    f = Path(data_folder)
+    ss_interaction.exec_behaviour_1_fromfolder(f)
 
     rclpy.shutdown()
     exit(0)
