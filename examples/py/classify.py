@@ -27,6 +27,25 @@ class Classifyer(object):
         sdata = self.scaler.transform_one(ddata)
         return sdata
 
+    def get_equal_ratios(self, running_window=0):
+
+        pred = np.array(self._list_pred)
+        outcome = np.array(self._list_outcome)
+        equal = np.equal(pred, outcome)
+        l = len(equal)
+        divider = np.linspace(1, l, l)
+        equal_accum = np.cumsum(equal)
+
+        if running_window > 0:
+            equal_accum = np.convolve(equal,np.ones(running_window),'same')
+            equal_accum[:running_window // 2] = np.nan
+            equal_accum[-(running_window // 2):] = np.nan
+            divider = np.ones(l)*running_window
+
+
+        ratios = equal_accum / divider
+        return ratios
+
 
 
     def data2dict(self,data):
@@ -44,17 +63,26 @@ class Classifyer(object):
     def predict(self, data:list):
         sdata = self.scale(data)
         pred = self.model.predict_one(sdata)
-        pred_prob = self.model.predict_proba_one(sdata)
-        print(pred_prob)
+        #pred_prob = self.model.predict_proba_one(sdata)
+        #print(pred_prob)
         return pred
 
+    def predict_prob(self, data:list):
+        sdata = self.scale(data)
+        pred_prob = self.model.predict_proba_one(sdata)
+        return pred_prob
+
     def storeOutcome(self, prediciton:bool, real:bool):
-        if prediciton is None:
-            return
         self._list_outcome.append(real)
         self._list_pred.append(prediciton)
-        self.confusion.update(real,prediciton)
+        if prediciton is None:
+            return
+        self.confusion.update(real, prediciton)
 
-    def resetConfusion(self):
+    def resetConfusion(self,bAndList=False):
         self.confusion = metrics.ConfusionMatrix()
+        if bAndList:
+            self._list_outcome.clear()
+            self._list_pred.clear()
+
 

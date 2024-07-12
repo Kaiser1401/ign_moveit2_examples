@@ -172,7 +172,7 @@ class SSInteraction(Node):
         succ_list_abs = []
         succ_list_rel = []
 
-        succ_thresh_dist = 0.05
+        succ_thresh_dist = 0.025
 
         self._moveit2_gripper.close()
         self._moveit2_gripper.wait_until_executed()
@@ -306,9 +306,14 @@ class SSInteraction(Node):
 
             print()
 
+            e.set_final_is(data_utils.p2t(pose_is_post))
             e.b_simulated = True
             e.b_prediction = pred
             e.b_outcome = succ_abs
+
+            #TODO do better eurustic than closed gripper
+            if not (self._moveit2_gripper.is_open):
+                e.b_handling_error_likely = True
 
             b_completed_file = (i==l)
             # update / learn with uncertainties and success

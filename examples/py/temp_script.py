@@ -4,9 +4,9 @@ import random
 import numpy as np
 
 n_start_offsets = 0
-n_samples_per_start = 10000
+n_samples_per_start = 1000
 
-fn = 'testdata_10k.dill'
+fn = 'testdata_v2_1k.dill'
 
 #start_offset_variance = 2*[0.1]+[0]+2*[0.0]+[1.5] # variate x,y, yaw for start offset
 start_offset_variance = 2*[0.01]+[0]+2*[0.0]+[0.2] # variate x,y, yaw for start offset
@@ -23,10 +23,10 @@ for i in range(n_start_offsets):
 
 
 target_from_start_offset = data_utils.Transform()
-target_from_start_offset.pos[1] =-0.1
+target_from_start_offset.pos[1] =-0.15
 
 #variance_for_variance = 3*[0.1]+2*[0.4]+[1.5]
-sigma = 3*[0.01]+3*[0.03]  # 1cm / ~1.8 deg
+sigma = 3*[0.015]+3*[0.04]  # 1.5cm / ~2.4 deg
 variance_for_variance = np.power(sigma,2)
 #variance_for_variance = 6*[0]
 

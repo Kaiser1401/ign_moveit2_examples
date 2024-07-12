@@ -38,7 +38,7 @@ def joint_dist(j1:list|npt.ArrayLike,j2:list|npt.ArrayLike):
 
     return np.linalg.norm(a1-a2)
 
-class DataEntry(object):
+class DataEntry_v1(object):
     def __init__(self):
         self.start_offset_is = Transform()
         self.goal_offset_is = Transform()
@@ -63,6 +63,16 @@ class DataEntry(object):
 
 
 
+class DataEntry(DataEntry_v1):
+    def __init__(self):
+        super().__init__()
+        # remember the final pose, makes reevaluating on different success criteria possible
+        self.final_pose_from_goal = Transform()
+        self.b_handling_error_likely = False # have some heuristic that marks failures due to planning / robot / simulation error
+
+    def set_final_is(self, pose_final):
+        pose_final_shall = self.get_goal_is()
+        self.final_pose_from_goal = pose_final_shall.inverse * pose_final
 
 
 

@@ -58,7 +58,8 @@ def generate_launch_description() -> LaunchDescription:
             package="ign_moveit2_examples",
             executable="ss_interaction_1.py",
             output="log",
-            arguments=["--ros-args", "--log-level", log_level],
+            #arguments=["--ros-args", "--log-level", log_level],
+            arguments=["--ros-args", "--log-level", "info"],
             parameters=[{"use_sim_time": use_sim_time}],
             on_exit=[Shutdown()],
         ),
@@ -96,12 +97,12 @@ def generate_declared_arguments() -> List[DeclareLaunchArgument]:
         ),
         DeclareLaunchArgument(
             "ign_verbosity",
-            default_value="2",
+            default_value="0",
             description="Verbosity level for Ignition Gazebo (0~4).",
         ),
         DeclareLaunchArgument(
             "log_level",
-            default_value="warn",
+            default_value="error",
             description="The level of logging that is applied to all ROS 2 nodes launched by this script.",
         ),
     ]

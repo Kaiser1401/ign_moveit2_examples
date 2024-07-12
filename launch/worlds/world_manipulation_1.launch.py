@@ -37,7 +37,7 @@ def generate_launch_description() -> LaunchDescription:
                     ]
                 )
             ),
-            launch_arguments=[("ign_args", [world, " -r -v ", ign_verbosity])],
+            launch_arguments=[("ign_args", [world, " -r -s -v ", "0"])],
         ),
     ]
 
