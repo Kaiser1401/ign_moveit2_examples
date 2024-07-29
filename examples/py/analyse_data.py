@@ -6,6 +6,7 @@ import numpy as np
 from math3d import (Transform, Orientation, PositionVector, Versor)
 import classify
 import random
+from pathlib import Path
 
 v_names = ['s_x', 's_y', 's_z', 's_roll', 's_pitch', 's_yaw']
 v_names_offsets = ['o_x', 'o_y', 'o_z', 'o_roll', 'o_pitch', 'o_yaw']
@@ -14,10 +15,31 @@ f_names = ['sum_s_trans', 'sum_s_rot', 'max_s_trans', 'max_s_rot', 'o_distance',
 
 tf_lookup = {True: 1.0, False: 0.0}
 
+pd.set_option("display.precision", 2)
 
-plt.xkcd()
+#TODO: colour palettes and symbols -> https://ranocha.de/blog/colors/#gsc.tab=0 + ask Sebastien? -> https://github.com/garrettj403/SciencePlots ?
+
+#plt.xkcd()
 
 # random.seed(1234)
+
+bSaveFigures = False
+figurefolder = ""
+
+def figsave(plot_axis):
+    if not bSaveFigures:
+        return plot_axis
+    p = Path(figurefolder)
+    Path.mkdir(p, parents=True, exist_ok=True)
+    i = 1
+    fn = p / f'figure{i}.svg'
+    while fn.exists():
+        i+=1
+        fn = p / f'figure{i}.svg'
+    plot_axis.figure.savefig(fn)
+
+    return plot_axis
+
 
 def confusion_data_binary(cm:classify.metrics.ConfusionMatrix, bPrint=False):
     # binary cm (TRUE, FALSE)
@@ -26,23 +48,28 @@ def confusion_data_binary(cm:classify.metrics.ConfusionMatrix, bPrint=False):
     fp = cm.false_positives(True)
     fn = cm.false_negatives(True)
 
+    print(tp, tn, fp, fn)
     sum = tp+tn+fp+fn
+    suc = tp + fn
 
     metrics = {
         'sum': sum,
+        'succesfull interactions': suc,
+        'correct predictions' : tp+tn,
         'accuracy': (tp+tn) / sum,
         'error': (fp + fn) / sum,
         'precision': tp/(tp+fp),
         'recall': tp/(tp+fn),
         'specificity': tn/(tn+fp),
+
     }
 
     decimals = 2
     if bPrint:
         rounded_metrics = {key : round(metrics[key],decimals) for key in metrics}
         print("------------------")
-        print("      / Actual")
-        print("Pred /")
+        print("      / Predicted")
+        print("Act. /")
         print(cm)
         {print(f"{k:<12}: {v}") for k,v in rounded_metrics.items()}
         print("------------------")
@@ -54,6 +81,16 @@ def confusion_data_binary(cm:classify.metrics.ConfusionMatrix, bPrint=False):
 
 
 def relearn(data,bshuffle=False):
+
+
+    def get_succ_prob(pred_prob_list):
+        if len(pred_prob_list) <1 :
+            return None
+        if True in pred_prob_list:
+            return pred_prob_list[True]
+        else:
+            return 1.0-pred_prob_list[False]
+
 
     i_stop_learning_after = 0
     clf = classify.Classifyer()
@@ -79,11 +116,11 @@ def relearn(data,bshuffle=False):
             learned_count += 1
         clf.storeOutcome(pred, outcome)
 
-        try:
-            predicted_probability__iter.append(pred_prob[True])
+        tmp = get_succ_prob(pred_prob)
+        if tmp is not None:
+            predicted_probability__iter.append(tmp)
             result__iter.append(tf_lookup[e.b_outcome])
-        except KeyError as ex:
-            print(ex)
+
 
 
 
@@ -127,7 +164,7 @@ def relearn(data,bshuffle=False):
           }
     )
 
-    pd_correct_prediction_ratios.plot()
+    figsave(pd_correct_prediction_ratios.plot())
 
     pd_pred_probabilities_iter = pd.DataFrame(
         {
@@ -145,13 +182,28 @@ def relearn(data,bshuffle=False):
     )
 
     n_bins = 10
+    bEqualBinSize = True
+
     pd_binned_probabilities = pd_pred_probabilities_iter.copy()
-    pd_binned_probabilities["bins"]=pd.cut(pd_binned_probabilities['probability_predicted'],np.linspace(0,1, n_bins+1),right=True)
-    pd_tmp = pd_binned_probabilities.groupby("bins").mean()
+    bin_labels = []
+    for b in range(n_bins):
+        bin_labels.append(str(b+1))
+
+    if bEqualBinSize:
+        # equal bin count
+        pd_binned_probabilities["interval"] = pd.qcut(pd_binned_probabilities['probability_predicted'],n_bins)
+    else:
+        # equal bin width
+        pd_binned_probabilities["interval"]=pd.cut(pd_binned_probabilities['probability_predicted'],np.linspace(0,1, n_bins+1),right=True,include_lowest=True)
+
+    pd_tmp = pd_binned_probabilities.groupby("interval").mean()
     pd_tmp["diff"] = pd_tmp["probability_predicted"] - pd_tmp["outcome"]
-    pd_tmp.plot(kind='bar',grid=True)
-
-
+    pd_tmp['bins'] = bin_labels
+    pd_tmp['n'] = pd_binned_probabilities.groupby("interval").count()['outcome']
+    pd_tmp['s'] = pd_binned_probabilities.groupby("interval").sum()['outcome']
+    pd_tmp['inter'] = pd_tmp.index
+    print(pd_tmp[['bins','inter','n','s','probability_predicted','outcome','diff']].to_string(index=False))
+    figsave(pd_tmp.plot('bins', y=['probability_predicted', 'outcome', 'diff'], kind='bar', grid=True))
 
 
 
@@ -218,40 +270,42 @@ def plot_variances(df):
     oi = 0
     fi = 0
 
-    for vi in range(6):
+#    for vi in range(6):
         #df.plot(x=v_names[vi], y=o_names[oi], style='o')
-        df.boxplot(column=v_names[vi], by=o_names[oi])
+#        df.boxplot(column=v_names[vi], by=o_names[oi])
 
     #for fi in range(2):
         #df.plot(x=f_names[fi], y=o_names[oi], style='o')
 
-    colors = np.where(df[o_names[oi]]==1,'y','k')
+    colors = np.where(df[o_names[oi]]==1,'g','k')
+    print(f'Succes count: {np.sum(df[o_names[oi]])}')
     #colors = np.where(df[o_names[oi]] == 1, 'y', np.where(df[o_names[1]] == 1,'r','k'))
-    df.plot.scatter(x=f_names[0],y=f_names[1],c=colors, style='x', alpha=0.3)
-    df.plot.scatter(x=f_names[2], y=f_names[3], c=colors, style='x', alpha=0.3)
-    df.plot.scatter(x=v_names[1], y=v_names[2], c=colors, style='x', alpha=0.3)
+    figsave(df.plot.scatter(x=f_names[0], y=f_names[1], c=colors, marker='x'))
+#    figsave(df.plot.scatter(x=f_names[2], y=f_names[3], c=colors, style='x', alpha=0.3))
+#    figsave(df.plot.scatter(x=v_names[1], y=v_names[2], c=colors, style='x', alpha=0.3))
 
-    df.boxplot(column=f_names[0], by=o_names[oi])
-    df.boxplot(column=f_names[1], by=o_names[oi])
+#    figsave(df.boxplot(column=f_names[0], by=o_names[oi]))
+#    figsave(df.boxplot(column=f_names[1], by=o_names[oi]))
 
-    for vi in range(6):
+#    for vi in range(6):
         #df.plot(x=v_names[vi], y=o_names[oi], style='o')
-        df.boxplot(column=v_names_offsets[vi], by=o_names[oi])
+#        df.boxplot(column=v_names_offsets[vi], by=o_names[oi])
 
-    for vi in range(6):
-        df.plot(x=v_names_offsets[vi], y=o_names[oi], style='o')
+#    for vi in range(6):
+#        df.plot(x=v_names_offsets[vi], y=o_names[oi], style='o')
 
-    df.plot.scatter(x=f_names[4],y=f_names[5],c=colors, style='x', alpha=0.3)
+#    figsave(df.plot.scatter(x=f_names[4],y=f_names[5],c=colors, style='x', alpha=0.3))
 
-    df.boxplot(column=f_names[4], by=o_names[oi])
-    df.boxplot(column=f_names[5], by=o_names[oi])
+#    figsave(df.boxplot(column=f_names[4], by=o_names[oi]))
+#    figsave(df.boxplot(column=f_names[5], by=o_names[oi]))
 
 
 if __name__ == "__main__":
     fn = '/home/klaus/code/pymi2_ws/sim_data/out/testdata_v2_1k.dill'
+    figurefolder = '/home/klaus/code/pymi2_ws/sim_data/figures'
 
     data = load_file(fn)
-    relearn(data,bshuffle=True)
+    relearn(data,bshuffle=False)
 
 
     df = data_2_pandas(data)

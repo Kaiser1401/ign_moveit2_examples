@@ -271,6 +271,8 @@ class SSInteraction(Node):
     
             pose_dest = data_utils.t2p(e.get_goal_hat())
 
+            self.reset_object_pose("gz_moveit2_manipulation_1", "visual_cube_goal", pose_dest)
+
             pred = clf.predict(e.sampled_variance)
 
 

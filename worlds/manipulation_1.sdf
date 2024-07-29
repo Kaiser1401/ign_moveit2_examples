@@ -164,18 +164,32 @@
           </material>
         </visual>
       </link>
+    </model>
 
-            <!-- Pose publisher plugin, used to determine the target pose to reach -->
-      <!--<plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
-        <publish_nested_model_pose>true</publish_nested_model_pose>
-        <publish_link_pose>false</publish_link_pose>
-        <publish_collision_pose>false</publish_collision_pose>
-        <publish_visual_pose>false</publish_visual_pose>
-      </plugin>-->
+    <!-- Object to interact_visual_goal -->
+    <model name="visual_cube_goal">
+      <pose>0.5 0.25 0.025 -3.14 0.0 0.0</pose>
+      <static>true</static>
+      <link name="interaction_cube_goal_link">
+        <visual name="interaction_cube_visual_goal">
+          <geometry>
+            <box>
+              <size>0.05 0.05 0.05</size>
+            </box>
+          </geometry>
+          <material>
+            <diffuse>0.1 0.92 0.1 0.5</diffuse>
+            <specular>0.4 0.7 0.4 0.5</specular>
+          </material>
+        </visual>
+      </link>
     </model>
 
 
 
+    <!-- <sphere>
+              <radius>0.5</radius>
+            </sphere> -->
 
   </world>
 </sdf>

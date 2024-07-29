@@ -5,6 +5,10 @@ from river import metrics
 
 import numpy as np
 
+# https://scikit-learn.org/stable/modules/generated/sklearn.naive_bayes.GaussianNB.html
+# https://stackoverflow.com/questions/62933365/how-to-get-the-feature-importance-in-gaussian-naive-bayes
+
+
 class Classifyer(object):
     def __init__(self):
         #self.model = LogisticRegression()
@@ -15,7 +19,7 @@ class Classifyer(object):
         self.confusion = metrics.ConfusionMatrix()
 
 
-    def scale(self,data):
+    def scale(self,data,learn):
         # my prescale
         # sqrt -> var to sigma
         da = np.array(data)
@@ -23,7 +27,8 @@ class Classifyer(object):
 
         #scaler
         ddata = self.data2dict(ds)
-        self.scaler.learn_one(ddata)
+        if learn:
+            self.scaler.learn_one(ddata)
         sdata = self.scaler.transform_one(ddata)
         return sdata
 
@@ -57,18 +62,18 @@ class Classifyer(object):
         return d
 
     def learn(self, data:list, label:bool):
-        sdata = self.scale(data)
+        sdata = self.scale(data,learn=True)
         self.model.learn_one(sdata, label)
 
     def predict(self, data:list):
-        sdata = self.scale(data)
+        sdata = self.scale(data,learn=False)
         pred = self.model.predict_one(sdata)
         #pred_prob = self.model.predict_proba_one(sdata)
         #print(pred_prob)
         return pred
 
     def predict_prob(self, data:list):
-        sdata = self.scale(data)
+        sdata = self.scale(data,learn=False)
         pred_prob = self.model.predict_proba_one(sdata)
         return pred_prob
 
