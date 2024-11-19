@@ -128,13 +128,13 @@
         <visual name="interaction_cube_visual">
           <!-- <pose> </pose> --> <!-- pose in visual and collision should be possible -->
           <geometry>
-          <!-- test visualizing part mesh
+          <!---test visualizing part mesh -->
           <mesh>
             <uri>s-16nt-39.dae</uri>
-           </mesh> -->
-           <box>
+           </mesh>
+          <!-- <box>
               <size>0.05 0.05 0.05</size>
-            </box>
+            </box>-->
           </geometry>
           <material>
             <diffuse>0.6 0.6 0.6 1</diffuse><!--Grey 40-->

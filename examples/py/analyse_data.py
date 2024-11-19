@@ -1,12 +1,47 @@
+import sys
+
 import data_utils
 import pandas as pd
 import matplotlib.pyplot as plt
+import scienceplots
 import math
 import numpy as np
 from math3d import (Transform, Orientation, PositionVector, Versor)
 import classify
 import random
 from pathlib import Path
+
+
+# TODO make this a lib!!
+# chosse colors and styles, copy to latex and inkscape
+# have look ata seaborn for plotting https://seaborn.pydata.org/generated/seaborn.pairplot.html#seaborn.pairplot
+# https://matplotlib.org/stable/users/prev_whats_new/dflt_style_changes.html
+
+# ,'ieee','std-colors'
+plt_style_normal = ['science','no-latex','nature']
+
+plt.style.use(plt_style_normal)
+
+
+
+def plt_style_scatter(bScatter):
+    if bScatter:
+        plt.style.use(plt_style_normal + ['scatter'])
+    else:
+        plt.style.use(plt_style_normal)
+
+
+print(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+#print(plt.rcParams['axes.prop_cycle'].by_key()['linestyle'])
+#print(plt.rcParams['axes.prop_cycle'].by_key()['marker'])
+
+def color(idx):
+    cycle = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    l = len(cycle)
+    idx = idx % l
+    return cycle[idx]
+
+
 
 v_names = ['s_x', 's_y', 's_z', 's_roll', 's_pitch', 's_yaw']
 v_names_offsets = ['o_x', 'o_y', 'o_z', 'o_roll', 'o_pitch', 'o_yaw']
@@ -33,12 +68,17 @@ def figsave(plot_axis):
     Path.mkdir(p, parents=True, exist_ok=True)
     i = 1
     fn = p / f'figure{i}.svg'
+    fn_png = p / f'figure{i}.png'
     while fn.exists():
         i+=1
         fn = p / f'figure{i}.svg'
+
     plot_axis.figure.savefig(fn)
+    plot_axis.figure.savefig(fn_png)
 
     return plot_axis
+
+
 
 
 def confusion_data_binary(cm:classify.metrics.ConfusionMatrix, bPrint=False):
@@ -48,7 +88,7 @@ def confusion_data_binary(cm:classify.metrics.ConfusionMatrix, bPrint=False):
     fp = cm.false_positives(True)
     fn = cm.false_negatives(True)
 
-    print(tp, tn, fp, fn)
+    #print(tp, tn, fp, fn)
     sum = tp+tn+fp+fn
     suc = tp + fn
 
@@ -101,7 +141,10 @@ def relearn(data,bshuffle=False):
     predicted_probability__post = []
     result__post = []
 
-    if bshuffle:
+    if bshuffle > 0:
+        r_seed = random.randrange(sys.maxsize)
+        print(f'Randomized list with seed: {r_seed}')
+        random.seed(r_seed)
         random.shuffle(data)
 
     learned_count = 0
@@ -164,7 +207,7 @@ def relearn(data,bshuffle=False):
           }
     )
 
-    figsave(pd_correct_prediction_ratios.plot())
+    figsave(pd_correct_prediction_ratios[['pred_cum_ratio_iter']].plot())
 
     pd_pred_probabilities_iter = pd.DataFrame(
         {
@@ -202,8 +245,14 @@ def relearn(data,bshuffle=False):
     pd_tmp['n'] = pd_binned_probabilities.groupby("interval").count()['outcome']
     pd_tmp['s'] = pd_binned_probabilities.groupby("interval").sum()['outcome']
     pd_tmp['inter'] = pd_tmp.index
-    print(pd_tmp[['bins','inter','n','s','probability_predicted','outcome','diff']].to_string(index=False))
-    figsave(pd_tmp.plot('bins', y=['probability_predicted', 'outcome', 'diff'], kind='bar', grid=True))
+
+    pd_print = pd_tmp[['bins','inter','n','s','probability_predicted','outcome','diff']]
+    print(pd_print.to_string(index=False))
+
+
+    # figsave(pd_tmp.plot('bins', y=['probability_predicted', 'outcome', 'diff'], kind='bar', grid=True))
+
+    figsave(pd_tmp.plot(y=['probability_predicted', 'outcome', 'diff'], kind='bar', grid=True))
 
 
 
@@ -280,7 +329,15 @@ def plot_variances(df):
     colors = np.where(df[o_names[oi]]==1,'g','k')
     print(f'Succes count: {np.sum(df[o_names[oi]])}')
     #colors = np.where(df[o_names[oi]] == 1, 'y', np.where(df[o_names[1]] == 1,'r','k'))
-    figsave(df.plot.scatter(x=f_names[0], y=f_names[1], c=colors, marker='x'))
+    # figsave(df.plot.scatter(x=f_names[0], y=f_names[1], c=colors, marker='x'))
+
+    plt_style_scatter(True)
+    ax = df.loc[df[o_names[oi]] == 1].plot(x=f_names[0], y=f_names[1], marker='o', c=color(1))
+    ax = df.loc[df[o_names[oi]] == 0].plot(x=f_names[0], y=f_names[1], ax=ax, marker='x', c=color(2))
+    plt_style_scatter(False)
+
+    figsave(df.plot.scatter(x=f_names[0], y=f_names[1]))
+
 #    figsave(df.plot.scatter(x=f_names[2], y=f_names[3], c=colors, style='x', alpha=0.3))
 #    figsave(df.plot.scatter(x=v_names[1], y=v_names[2], c=colors, style='x', alpha=0.3))
 
@@ -305,10 +362,14 @@ if __name__ == "__main__":
     figurefolder = '/home/klaus/code/pymi2_ws/sim_data/figures'
 
     data = load_file(fn)
-    relearn(data,bshuffle=False)
+    relearn(data, bshuffle=False)
 
 
     df = data_2_pandas(data)
     #print(df.count())
-    plot_variances(df)
+    #plot_variances(df)
+
+
+
+
     plt.show(block=True)
