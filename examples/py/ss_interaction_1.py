@@ -6,6 +6,7 @@ from threading import Thread
 import rclpy
 
 from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion
+
 from pymoveit2 import MoveIt2, MoveIt2Gripper
 from pymoveit2.robots import panda
 from rclpy.callback_groups import ReentrantCallbackGroup
@@ -40,6 +41,25 @@ joint_configuration_default = [
     1.5707963267948966,
     0.7853981633974483,
 ]
+
+
+gripping_pose_dict = {}
+
+gripping_pose_dict[None] = data_utils.Transform()
+
+t_tmp = data_utils.Transform()
+t_tmp.pos.z = 0.11
+t_tmp.pos.x = 0.015
+t_tmp.orientation = data_utils.Orientation.new_from_euler((0,-1.57,0),encoding='xyz')
+t_tmp.orientation *= data_utils.Orientation.new_from_euler((0,0,3.14),encoding='xyz')
+gripping_pose_dict['nt39_flange'] = t_tmp
+
+t_tmp = data_utils.Transform()
+t_tmp.pos.x = 0.037
+t_tmp.orientation = data_utils.Orientation.new_from_euler((0,-1.57,0),encoding='xyz')
+t_tmp.orientation *= data_utils.Orientation.new_from_euler((0,0,1.57*0.5),encoding='xyz')
+gripping_pose_dict['nt39_center'] = t_tmp
+
 
 class SSInteraction(Node):
     def __init__(self):
@@ -135,7 +155,7 @@ class SSInteraction(Node):
     def write_all_done(self, folder):
         open(folder / all_done_file, 'a').close()
 
-    def     exec_behaviour_1_fromfolder(self,folder:Path):
+    def  exec_behaviour_1_fromfolder(self,folder:Path):
 
         self.get_logger().warn(str(Path().cwd().absolute()))
 
@@ -172,7 +192,12 @@ class SSInteraction(Node):
         succ_list_abs = []
         succ_list_rel = []
 
-        succ_thresh_dist = 0.025
+        # cube:
+        #succ_thresh_dist = 0.025
+        # m_per_rad = 0
+        # nt39
+        succ_thresh_dist = 0.05
+        m_per_rad = 0.10 # 10cm distance offset/penalti per radiant rotation
 
         self._moveit2_gripper.close()
         self._moveit2_gripper.wait_until_executed()
@@ -277,13 +302,23 @@ class SSInteraction(Node):
 
 
             # interact
-            res = self.grip_and_place(pose_hat, pose_dest, bool_lift=False)
+            res = self.grip_and_place(pose_hat, pose_dest, bool_lift=True, origin_T_gripper=gripping_pose_dict['nt39_flange'])
+
+            #res = self.grip_and_place(pose_is_pre, data_utils.t2p(e.get_goal_is()), bool_lift=True, origin_T_gripper=gripping_pose_dict['nt39_flange'])
+
 
             if not res:
                 fishy_counter += 1
                 if fishy_counter > 5:
                     self.get_logger().error("Something seems fishy... lets quit")
                     return
+
+
+            self._got_pose = False
+            #wait for gazebo to set pose
+            while (not self._got_pose):
+                self.get_logger().warn("No target pose yet... ", throttle_duration_sec=1)
+                time.sleep(0.05)
 
             # get pose from gz
             pose_is_post = self.__previous_target_pose
@@ -292,11 +327,11 @@ class SSInteraction(Node):
             # TODO define success
             # check success
             # absolute (is) goal within threshold?
-            succ_abs = data_utils.pose_distance(pose_is_post, e.get_goal_is()) <= succ_thresh_dist
+            succ_abs = data_utils.pose_distance(pose_is_post, e.get_goal_is(),m_per_rad) <= succ_thresh_dist
             succ_list_abs.append(succ_abs)
 
             # relative (estimated) goal within threshold?
-            succ_rel = data_utils.pose_distance(pose_is_post, e.get_goal_hat()) <= succ_thresh_dist
+            succ_rel = data_utils.pose_distance(pose_is_post, e.get_goal_hat(),m_per_rad) <= succ_thresh_dist
             succ_list_rel.append(succ_rel)
 
 
@@ -322,8 +357,8 @@ class SSInteraction(Node):
 
 
             # write data every now and then,
-            if (i % 25) == 0:
-                data_utils.write_data(entries, pw, backup=(i % 250 == 0))
+            if (i % 10) == 0:
+                data_utils.write_data(entries, pw, backup=(i % 100 == 0))
                 data_utils.write_data(clf, pc)
 
 
@@ -345,66 +380,66 @@ class SSInteraction(Node):
 
 
 
-
-    def exec_behaviour_1(self, loop_count=1):
-
-        # Move_to_default
-        self._moveit2.move_to_configuration(joint_configuration_default)
-        self._moveit2.wait_until_executed()
-
-        self._moveit2_gripper.open()
-        self._moveit2_gripper.wait_until_executed()
-
-        self._moveit2_gripper.close()
-        self._moveit2_gripper.wait_until_executed()
-
-        self.get_logger().info("Starting behaviour Sequence ...")
-
-        for x in range(loop_count):
-
-            self.get_logger().info(f"Sequence Loop {x+1}/{loop_count} ...")
-
-            #randomize pose in gz ?
-
-            while (not self._got_pose):
-                self.get_logger().warn("No target pose yet... ", throttle_duration_sec=1)
-                time.sleep(0.1)
-
-            #get pose from gz
-            pose_is_pre = self.__previous_target_pose
-
-            # print(pose_is_pre)
-
-            #emulte perception
-            pose_hat, uncertainties = self.sample_around_pose(pose_is_pre)
-            pose_dest = deepcopy(pose_hat)
-
-            # set target
-            pose_dest.position.x += 0.2
-            pose_dest.position.y -= 0.1
-
-            # predict from uncertainties
-
-            #interact
-            self.grip_and_place(pose_hat, pose_dest, bool_lift=False)
-
-
-
-            #get pose from gz
-            pose_is_post = self.__previous_target_pose
-
-            # print(pose_is_post)
-
-            #check success
-            # TODO define success
-
-            # update / learn with uncertainties and success
-
-            # reset
-            self.reset_object_pose("gz_moveit2_manipulation_1", "interaction_cube", self._initial_object_pose)
-            self._got_pose = False
-
-        self.get_logger().info(f"Sequence Done ({loop_count} Loops)")
+    #
+    # def exec_behaviour_1(self, loop_count=1):
+    #
+    #     # Move_to_default
+    #     self._moveit2.move_to_configuration(joint_configuration_default)
+    #     self._moveit2.wait_until_executed()
+    #
+    #     self._moveit2_gripper.open()
+    #     self._moveit2_gripper.wait_until_executed()
+    #
+    #     self._moveit2_gripper.close()
+    #     self._moveit2_gripper.wait_until_executed()
+    #
+    #     self.get_logger().info("Starting behaviour Sequence ...")
+    #
+    #     for x in range(loop_count):
+    #
+    #         self.get_logger().info(f"Sequence Loop {x+1}/{loop_count} ...")
+    #
+    #         #randomize pose in gz ?
+    #
+    #         while (not self._got_pose):
+    #             self.get_logger().warn("No target pose yet... ", throttle_duration_sec=1)
+    #             time.sleep(0.1)
+    #
+    #         #get pose from gz
+    #         pose_is_pre = self.__previous_target_pose
+    #
+    #         # print(pose_is_pre)
+    #
+    #         #emulte perception
+    #         pose_hat, uncertainties = self.sample_around_pose(pose_is_pre)
+    #         pose_dest = deepcopy(pose_hat)
+    #
+    #         # set target
+    #         pose_dest.position.x += 0.2
+    #         pose_dest.position.y -= 0.1
+    #
+    #         # predict from uncertainties
+    #
+    #         #interact
+    #         self.grip_and_place(pose_hat, pose_dest, bool_lift=False)
+    #
+    #
+    #
+    #         #get pose from gz
+    #         pose_is_post = self.__previous_target_pose
+    #
+    #         # print(pose_is_post)
+    #
+    #         #check success
+    #         # TODO define success
+    #
+    #         # update / learn with uncertainties and success
+    #
+    #         # reset
+    #         self.reset_object_pose("gz_moveit2_manipulation_1", "interaction_cube", self._initial_object_pose)
+    #         self._got_pose = False
+    #
+    #     self.get_logger().info(f"Sequence Done ({loop_count} Loops)")
 
 
 
@@ -417,7 +452,16 @@ class SSInteraction(Node):
         return pose_sampled, uncertainties
 
 
-    def grip_and_place(self, start:Pose, goal:Pose, bool_lift = True):
+    def grip_and_place(self, start:Pose, goal:Pose, bool_lift = True, origin_T_gripper:data_utils.Transform=None):
+
+        #aplly gripper to origin offset to both, start and goal
+
+        def applyTransform(p:Pose, t:data_utils.Transform):
+            return data_utils.t2p(data_utils.p2t(p) * t)
+
+        if origin_T_gripper is not None:
+            start = applyTransform(start,origin_T_gripper)
+            goal = applyTransform(goal,origin_T_gripper)
 
         # Open gripper
         self._moveit2_gripper.open()
@@ -483,7 +527,8 @@ class SSInteraction(Node):
 
         # Move_to_default
         self._moveit2.move_to_configuration(joint_configuration_default)
-        res = self._moveit2.wait_until_executed() & res
+        self._moveit2.wait_until_executed()
+        #res =  & res
 
         return res
 

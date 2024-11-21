@@ -19,7 +19,7 @@ def pose_distance(p1:Pose|Transform,p2:Pose|Transform,m_per_rad=0):
     else:
         t2 = p2
 
-    t_diff = t1 * t2.inverse
+    t_diff = t1.inverse * t2
     #assert isinstance(t_diff, Transform)
     dist_rotation = t_diff.orientation.ang_norm * m_per_rad
     dist_linear = t_diff.pos.length

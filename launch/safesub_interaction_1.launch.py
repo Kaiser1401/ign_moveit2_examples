@@ -65,6 +65,8 @@ def generate_launch_description() -> LaunchDescription:
         ),
     ]
 
+    #nodes = [] # nope
+
     return LaunchDescription(declared_arguments + launch_descriptions + nodes)
 
 

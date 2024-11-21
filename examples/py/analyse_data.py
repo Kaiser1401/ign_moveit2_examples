@@ -274,7 +274,7 @@ def data_2_pandas(data):
         assert isinstance(e, data_utils.DataEntry)
 
         if e.b_outcome is None:
-            break
+            continue
 
         tmpdict = {}
         # standard_deviation as numpy
