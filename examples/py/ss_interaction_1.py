@@ -47,6 +47,9 @@ gripping_pose_dict = {}
 
 gripping_pose_dict[None] = data_utils.Transform()
 
+gz_world_name = 'gz_moveit2_manipulation_1'
+
+
 t_tmp = data_utils.Transform()
 t_tmp.pos.z = 0.11
 t_tmp.pos.x = 0.015
@@ -59,6 +62,14 @@ t_tmp.pos.x = 0.037
 t_tmp.orientation = data_utils.Orientation.new_from_euler((0,-1.57,0),encoding='xyz')
 t_tmp.orientation *= data_utils.Orientation.new_from_euler((0,0,1.57*0.5),encoding='xyz')
 gripping_pose_dict['nt39_center'] = t_tmp
+
+
+t_tmp = data_utils.Transform()
+t_tmp.pos.z = 0.11
+t_tmp.pos.x = 0.015
+t_tmp.orientation = data_utils.Orientation.new_from_euler((0,-1.57,0),encoding='xyz')
+t_tmp.orientation *= data_utils.Orientation.new_from_euler((0,0,3.14),encoding='xyz')
+gripping_pose_dict['nt44_flange'] = t_tmp
 
 
 class SSInteraction(Node):
@@ -155,7 +166,7 @@ class SSInteraction(Node):
     def write_all_done(self, folder):
         open(folder / all_done_file, 'a').close()
 
-    def  exec_behaviour_1_fromfolder(self,folder:Path):
+    def  exec_behaviour_1_fromfolder(self, folder:Path, strPathUsePreLearnedClassifier=None):
 
         self.get_logger().warn(str(Path().cwd().absolute()))
 
@@ -268,6 +279,8 @@ class SSInteraction(Node):
                 continue
 
             if i==1:
+                if strPathUsePreLearnedClassifier is not None:
+                    clf = data_utils.load_data(strPathUsePreLearnedClassifier)
                 clf.resetConfusion()
 
 
@@ -282,7 +295,7 @@ class SSInteraction(Node):
             if not jreset():
                 break
 
-            self.reset_object_pose("gz_moveit2_manipulation_1", "interaction_cube", pose_is_pre)
+            self.reset_object_pose(gz_world_name, "interaction_cube", pose_is_pre)
             self._got_pose = False
 
             #wait for gazebo to set pose
@@ -292,17 +305,17 @@ class SSInteraction(Node):
 
             pose_hat = data_utils.t2p(e.get_pose_hat())
 
-            self.reset_object_pose("gz_moveit2_manipulation_1", "visual_cube_start", pose_hat)
+            self.reset_object_pose(gz_world_name, "visual_cube_start", pose_hat)
     
             pose_dest = data_utils.t2p(e.get_goal_hat())
 
-            self.reset_object_pose("gz_moveit2_manipulation_1", "visual_cube_goal", pose_dest)
+            self.reset_object_pose(gz_world_name, "visual_cube_goal", pose_dest)
 
             pred = clf.predict(e.sampled_variance)
 
 
             # interact
-            res = self.grip_and_place(pose_hat, pose_dest, bool_lift=True, origin_T_gripper=gripping_pose_dict['nt39_flange'])
+            res = self.grip_and_place(pose_hat, pose_dest, bool_lift=True, origin_T_gripper=gripping_pose_dict['nt44_flange'])
 
             #res = self.grip_and_place(pose_is_pre, data_utils.t2p(e.get_goal_is()), bool_lift=True, origin_T_gripper=gripping_pose_dict['nt39_flange'])
 
@@ -335,8 +348,8 @@ class SSInteraction(Node):
             succ_list_rel.append(succ_rel)
 
 
-
-            clf.learn(e.sampled_variance, succ_abs)
+            if strPathUsePreLearnedClassifier is not None:
+                clf.learn(e.sampled_variance, succ_abs)
             clf.storeOutcome(pred, succ_abs)
 
             print(pred,succ_abs,succ_rel)
@@ -368,6 +381,7 @@ class SSInteraction(Node):
 
         data_utils.write_data(entries, pw)
         data_utils.write_data(clf, pc)
+
         if b_completed_file:
             f_data.rename(pd)
             pw.rename(po)
@@ -553,8 +567,11 @@ def main(args=None):
 
     #ss_interaction.exec_behaviour_1(5)
 
+    use_classifier = None
+    use_classifier = '/home/klaus/code/pymi2_ws/sim_data/out/testdata_nt44_v2_1k.classifier'
+
     f = Path(data_folder)
-    ss_interaction.exec_behaviour_1_fromfolder(f)
+    ss_interaction.exec_behaviour_1_fromfolder(f,use_classifier)
 
     rclpy.shutdown()
     exit(0)

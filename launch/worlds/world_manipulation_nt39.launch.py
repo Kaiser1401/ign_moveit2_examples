@@ -1,5 +1,5 @@
 #!/usr/bin/env -S ros2 launch
-"""Launch Python example for throwing an object"""
+"""Launch worlds/manipulation_1.sdf and the required ROS<->IGN bridges"""
 
 from os import path
 from typing import List
@@ -9,7 +9,7 @@ from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, Shutdown
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
@@ -19,53 +19,61 @@ def generate_launch_description() -> LaunchDescription:
     declared_arguments = generate_declared_arguments()
 
     # Get substitution for all arguments
-    robot_type = LaunchConfiguration("robot_type")
-    rviz_config = LaunchConfiguration("rviz_config")
+    world = LaunchConfiguration("world")
     use_sim_time = LaunchConfiguration("use_sim_time")
     ign_verbosity = LaunchConfiguration("ign_verbosity")
     log_level = LaunchConfiguration("log_level")
 
     # List of included launch descriptions
     launch_descriptions = [
-        # Launch world with robot (configured for this example)
+        # Launch Ignition Gazebo
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(
                 PathJoinSubstitution(
                     [
-                        FindPackageShare("ign_moveit2_examples"),
+                        FindPackageShare("ros_gz_sim"),
                         "launch",
-                        "default.launch.py",
+                        "gz_sim.launch.py",
                     ]
                 )
             ),
-            launch_arguments=[
-                ("world_type", "manipulation_nt44"),
-                ("robot_type", robot_type),
-                ("rviz_config", rviz_config),
-                ("use_sim_time", use_sim_time),
-                ("ign_verbosity", ign_verbosity),
-                ("log_level", log_level),
-                ("enable_rviz", "False")
-            ],
+            launch_arguments=[("ign_args", [world, " -r -s -v ", "0"])],
         ),
     ]
 
     # List of nodes to be launched
-    # TODO shutdown launch when node is done
     nodes = [
-        # Run the example node (Python)
+        # ros_ign_bridge (clock -> ROS 2)
         Node(
-            package="ign_moveit2_examples",
-            executable="ss_interaction_1.py",
+            package="ros_gz_bridge",
+            executable="parameter_bridge",
             output="log",
-            #arguments=["--ros-args", "--log-level", log_level],
-            arguments=["--ros-args", "--log-level", "info"],
+            arguments=[
+                "/clock@rosgraph_msgs/msg/Clock[ignition.msgs.Clock",
+                "--ros-args",
+                "--log-level",
+                log_level,
+            ],
             parameters=[{"use_sim_time": use_sim_time}],
-            on_exit=[Shutdown()],
+        ),
+
+        # ros_ign_bridge (target pose -> ROS 2)
+        Node(
+            package="ros_gz_bridge",
+            executable="parameter_bridge",
+            output="log",
+            arguments=[
+                "/model/interaction_cube/pose"
+                + "@"
+                + "geometry_msgs/msg/PoseStamped[ignition.msgs.Pose",
+                "--ros-args",
+                "--log-level",
+                log_level,
+            ],
+            parameters=[{"use_sim_time": use_sim_time}],
+            remappings=[("/model/interaction_cube/pose", "/cube_pose_is")],
         ),
     ]
-
-    nodes = [] # nope
 
     return LaunchDescription(declared_arguments + launch_descriptions + nodes)
 
@@ -76,22 +84,17 @@ def generate_declared_arguments() -> List[DeclareLaunchArgument]:
     """
 
     return [
-        # Robot selection
+        # World for Ignition Gazebo
         DeclareLaunchArgument(
-            "robot_type",
-            default_value="panda",
-            description="Name of the robot to use.",
-        ),
-        # Miscellaneous
-        DeclareLaunchArgument(
-            "rviz_config",
+            "world",
             default_value=path.join(
                 get_package_share_directory("ign_moveit2_examples"),
-                "rviz",
-                "ign_moveit2_examples.rviz",
+                "worlds",
+                "manipulation_part_nt39.sdf",
             ),
-            description="Path to configuration for RViz2.",
+            description="Name or filepath of world to load.",
         ),
+        # Miscellaneous
         DeclareLaunchArgument(
             "use_sim_time",
             default_value="true",
@@ -99,12 +102,12 @@ def generate_declared_arguments() -> List[DeclareLaunchArgument]:
         ),
         DeclareLaunchArgument(
             "ign_verbosity",
-            default_value="0",
+            default_value="2",
             description="Verbosity level for Ignition Gazebo (0~4).",
         ),
         DeclareLaunchArgument(
             "log_level",
-            default_value="error",
+            default_value="warn",
             description="The level of logging that is applied to all ROS 2 nodes launched by this script.",
         ),
     ]

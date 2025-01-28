@@ -92,17 +92,19 @@ def confusion_data_binary(cm:classify.metrics.ConfusionMatrix, bPrint=False):
     sum = tp+tn+fp+fn
     suc = tp + fn
 
-    metrics = {
-        'sum': sum,
-        'succesfull interactions': suc,
-        'correct predictions' : tp+tn,
-        'accuracy': (tp+tn) / sum,
-        'error': (fp + fn) / sum,
-        'precision': tp/(tp+fp),
-        'recall': tp/(tp+fn),
-        'specificity': tn/(tn+fp),
-
-    }
+    try:
+        metrics = {
+            'sum': sum,
+            'succesfull interactions': suc,
+            'correct predictions' : tp+tn,
+            'accuracy': (tp+tn) / sum,
+            'error': (fp + fn) / sum,
+            'precision': tp/(tp+fp),
+            'recall': tp/(tp+fn),
+            'specificity': tn/(tn+fp),
+        }
+    except:
+        metrics = {}
 
     decimals = 2
     if bPrint:

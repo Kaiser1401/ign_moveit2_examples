@@ -4,9 +4,17 @@ from copy import deepcopy
 
 from pose_sample import add_noise_to_pose_msg
 from geometry_msgs.msg import PoseStamped, PoseWithCovariance, PoseWithCovarianceStamped, Pose
-from math3d import Transform, Orientation, PositionVector, Versor
+from math3d import Transform, Orientation, PositionVector, Versor, Vector
+from math3d.visualization import TransformVisualizer
+
 import numpy.typing as npt
 from pathlib import Path
+
+import json
+from scipy.spatial.transform import Rotation as SpR
+from scipy.stats import circmean, circstd
+from dataclasses import dataclass
+from numpy.typing import ArrayLike
 
 
 def pose_distance(p1:Pose|Transform,p2:Pose|Transform,m_per_rad=0):
@@ -164,10 +172,152 @@ def write_data(data:list, fn, backup=False):
     ptmp.rename(p)
 
 
-
-
-
 def load_data(fn)->list:
     with open(fn, 'rb') as file:
         data = dill.load(file)
     return data
+
+
+
+#--------- Ahmeds data
+
+def read_json_file(file_path):
+    with open(file_path, 'r') as f:
+        data = json.load(f)
+    return np.array(data['rotation_matrix']), np.array(data['translation_matrix'])
+
+
+def rot_trans_to_T(rot,trans):
+    T = Transform()
+    T.set_pos(Vector(trans))
+    T.set_orient(Orientation(rot))
+    return T
+
+@dataclass
+class TransformStats:
+    poseCount: int = 0
+    TGroundTruth: Transform = None
+    TAvg: Transform = None
+    stdDev_euler = ArrayLike
+    stdDev_position = ArrayLike
+
+
+
+
+def create_entry_from_realworld_json(fn_json):
+    entry = DataEntry()
+
+    rots, trans = read_json_file(fn_json)
+    trans /= 1000  # mm to m
+    Ts = []
+    Tgt = None
+    for i in range(len(rots)):
+        T = rot_trans_to_T(rots[i], trans[i])
+        if i == len(rots) - 1:
+            Tgt = T
+        else:
+            Ts.append(T)
+
+    tStats = transformation_averaging(Ts)
+    tStats.TGroundTruth = Tgt
+
+    Tdiff = Tgt.inverse * tStats.TAvg
+
+    entry.sampled_offset = Tdiff
+    entry.sampled_variance = np.power(np.concatenate((tStats.stdDev_position,tStats.stdDev_euler)),2)
+
+    return entry
+
+# https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.transform.Rotation.mean.html
+# https://users.cecs.anu.edu.au/~hartley/Papers/PDF/Hartley-Trumpf:Rotation-averaging:IJCV.pdf
+def transformation_averaging(listOfT):
+
+    ddof = 1 # -> sample standard deviation (../(N-1))-> https://numpy.org/doc/2.1/reference/generated/numpy.std.html
+    # treat pos and orientation separate
+    c = len(listOfT)
+    if c == 1:
+        return listOfT[0]
+
+    pos = []
+    eulerDiff = []
+    rStacked = np.zeros((c+1,3,3))
+    for i in range(c):
+        t = listOfT[i]
+        assert isinstance(t, Transform)
+        pos.append(t.get_pos().array)
+        rStacked[i]=t.get_orient().matrix
+
+
+    spRs = SpR.from_matrix(rStacked)
+    oAvg = Orientation(spRs.mean().as_matrix())
+
+
+    pAvg = np.array(pos).mean(0)
+    pStd = np.array(pos).std(0,ddof=ddof)
+
+    #get orientation_differences from average in euler
+
+
+    for i in range(c):
+        t = listOfT[i]
+        oDiff = oAvg.get_inverse() * t.orient
+        eulerDiff.append(oDiff.to_euler('xyz'))
+
+    #eAvgC = circmean(np.array(eulerDiff), axis=0)
+    #eStdC = circstd(np.array(eulerDiff), axis=0)
+    eAvg = np.array(eulerDiff).mean(0)
+    eStd = np.array(eulerDiff).std(0,ddof=ddof)
+
+    eMaxAbs = np.max(np.abs(np.array(eulerDiff)),axis=0)
+
+    print(f'pMean: {pAvg}')
+    print(f'pStdD: {pStd}')
+
+    print(f'eMax: {eMaxAbs}')
+    print(f'eMean: {eAvg}')
+    print(f'eStdD: {eStd}')
+    #print(f'eMeanC: {eAvgC}')
+    #print(f'eStdDC: {eStdC}')
+
+    tstat = TransformStats()
+    tstat.TAvg = Transform(oAvg,Vector(pAvg))
+    tstat.poseCount = c
+    tstat.stdDev_euler = eStd
+    tstat.stdDev_position = pStd
+
+    return tstat
+
+
+def vizT(T,tv=None,veclen=1.0):
+    if tv is None:
+        tv = TransformVisualizer(plot_identity=True, identity_label='O',uvec_length=veclen)
+    # tv.plot(m3d.Transform(), label='Base')
+    if (type(T) is list):
+        c=0
+        for e in T:
+            tv.plot(e, uvec_length=veclen, label=f'T_{c}')
+            c+=1
+    elif (type(T) is dict):
+        for k in T.keys():
+            tv.plot(T[k], uvec_length=veclen, label=str(k))
+    else:
+        tv.plot(T,uvec_length=veclen,label='Transformed')
+    return tv
+
+def get_realworld_entries_from_folder(folderpath):
+    folder = Path(folderpath)
+    data = []
+    i = 0
+    for jf in folder.rglob('*.json'):
+        print('-------')
+        print(f'{i}: {jf.name}')
+        entry = create_entry_from_realworld_json(jf)
+        print(entry.sampled_offset)
+        print(entry.sampled_variance)
+        data.append(entry)
+        i+=1
+
+    return data
+
+
+

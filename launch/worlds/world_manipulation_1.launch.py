@@ -90,7 +90,7 @@ def generate_declared_arguments() -> List[DeclareLaunchArgument]:
             default_value=path.join(
                 get_package_share_directory("ign_moveit2_examples"),
                 "worlds",
-                "manipulation_part.sdf",
+                "manipulation_1.sdf",
             ),
             description="Name or filepath of world to load.",
         ),

@@ -8,7 +8,7 @@ import numpy as np
 n_start_offsets = 0
 n_samples_per_start = 1000
 
-fn = 'testdata_nt39_v2_1k.dill'
+fn = 'testdata_nt44_v2_1k.dill'
 
 #start_offset_variance = 2*[0.1]+[0]+2*[0.0]+[1.5] # variate x,y, yaw for start offset
 start_offset_variance = 2*[0.01]+[0]+2*[0.0]+[0.2] # variate x,y, yaw for start offset
@@ -27,7 +27,7 @@ for i in range(n_start_offsets):
 target_from_start_offset = data_utils.Transform()
 #cube:
 #target_from_start_offset.pos[1] =-0.15
-#nt39:
+#nt39, nt44:
 target_from_start_offset.pos[1] =0.20 # move 20cm along y(body)
 target_from_start_offset.orientation=data_utils.Orientation.new_from_euler((-1.57,0,0),encoding='xyz') # turn -90deg around x(body)
 
@@ -51,7 +51,6 @@ for so in start_offsets:
 
 for e in test_entries:
     print(e.sampled_offset, e.sampled_variance)
-
 
 
 random.shuffle(test_entries)
